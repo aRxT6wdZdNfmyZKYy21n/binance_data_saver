@@ -1,0 +1,19 @@
+aiogram
+asyncpg
+chrono
+connectorx
+httpx
+numpy
+orjson
+polars
+polars_talib
+pyarrow
+pydantic
+pydantic-settings
+PyQt6
+pyqtgraph
+qasync
+# redis[hiredis]
+SQLAlchemy[asyncio]
+TA-Lib
+# websockets
