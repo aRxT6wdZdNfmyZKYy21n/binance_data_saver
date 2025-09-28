@@ -662,24 +662,3 @@ WHERE symbol_id IS NOT NULL;
             )
         else:
             self.__long_imbalances_dataframe = None
-
-    def __check_imbalance_filling(
-        self,
-        start_price: float,
-        end_price: float,
-        start_index: int,
-        candles_data: list[dict],
-    ) -> int | None:
-        """
-        Проверяет, закрыт ли имбаланс последующими свечами.
-        Возвращает timestamp_ms свечи, которая закрыла имбаланс, или None если не закрыт.
-        """
-        for i in range(start_index, len(candles_data)):
-            candle = candles_data[i]
-
-            # Проверяем, пересекает ли свеча диапазон имбаланса
-            # Имбаланс считается закрытым, если свеча пересекает диапазон [end_price, start_price]
-            if candle['low_price'] <= start_price and candle['high_price'] >= end_price:
-                return candle['start_timestamp_ms']
-
-        return None
