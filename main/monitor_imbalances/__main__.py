@@ -181,31 +181,34 @@ async def send_telegram_notification(
             # И новые, и закрытые
             message_parts.extend(
                 [
-                    f'🔄 *Обновление имбалансов*\n\n',
+                    # f'🔄 *Обновление имбалансов*\n\n',
+                    f'🔄 \n\n',
                     f'Символ: `{symbol_name}`\n',
                     f'Интервал: `{_INTERVAL_NAME}`\n',
-                    f'Новых: `+{new_imbalances_added}`\n',
-                    f'Закрытых: `-{existing_imbalances_closed}`\n\n',
+                    # f'Новых: `+{new_imbalances_added}`\n',
+                    # f'Закрытых: `-{existing_imbalances_closed}`\n\n',
                 ]
             )
         elif new_imbalances_added > 0:
             # Только новые
             message_parts.extend(
                 [
-                    f'🟢 *Новые лонговые имбалансы*\n\n',
+                    # f'🟢 *Новые лонговые имбалансы*\n\n',
+                    f'🟢 \n\n',
                     f'Символ: `{symbol_name}`\n',
-                    f'Интервал: `{_INTERVAL_NAME}`\n',
-                    f'Количество: `+{new_imbalances_added}`\n\n',
+                    # f'Интервал: `{_INTERVAL_NAME}`\n',
+                    # f'Количество: `+{new_imbalances_added}`\n\n',
                 ]
             )
         elif existing_imbalances_closed > 0:
             # Только закрытые
             message_parts.extend(
                 [
-                    f'🔴 *Имбалансы закрыты*\n\n',
+                    # f'🔴 *Имбалансы закрыты*\n\n',
+                    f'🔴 \n\n',
                     f'Символ: `{symbol_name}`\n',
                     f'Интервал: `{_INTERVAL_NAME}`\n',
-                    f'Закрыто: `-{existing_imbalances_closed}`\n\n',
+                    # f'Закрыто: `-{existing_imbalances_closed}`\n\n',
                 ]
             )
 
@@ -220,10 +223,10 @@ async def send_telegram_notification(
                 gap_percent = ((end_price - start_price) / start_price) * 100
 
                 message_parts.append(
-                    f'*{i}\\. Имбаланс:*\n'
-                    f'   От: `{start_price:.4f}`\n'
-                    f'   До: `{end_price:.4f}`\n'
-                    f'   Разрыв: `{gap_percent:.2f}%`\n\n'
+                    # f'*{i}\\. Имбаланс:*\n'
+                    f'*{i}\\.* Разрыв: `{gap_percent:.2f}%`'
+                    # f'\n   От: `{start_price:.4f}`'
+                    # f'\n   До: `{end_price:.4f}`'
                 )
 
             if len(imbalances_data) > 5:
@@ -233,18 +236,21 @@ async def send_telegram_notification(
 
         message = ''.join(message_parts)
 
-        if not await TelegramUtils.send_message_to_channel(
-            message,
-        ):
+        success = await TelegramUtils.send_message_to_channel(message)
+        
+        if success:
+            logger.info(f'Sent Telegram notification for symbol {symbol_name!r}')
+            await asyncio.sleep(5.0)  # s
+            return True
+        else:
+            # Сохраняем неудачное уведомление в БД для повторной отправки
+            await save_failed_notification(
+                symbol_name=symbol_name,
+                message=message,
+                new_imbalances_added=new_imbalances_added,
+                existing_imbalances_closed=existing_imbalances_closed,
+            )
             return False
-
-        logger.info(f'Sent Telegram notification for symbol {symbol_name!r}')
-
-        await asyncio.sleep(
-            5.0  # s
-        )
-
-        return True
     except Exception as exception:
         logger.error(
             f'Could not send Telegram notification for symbol {symbol_name!r}'
@@ -252,6 +258,109 @@ async def send_telegram_notification(
         )
 
         return False
+
+
+async def save_failed_notification(
+    symbol_name: str,
+    message: str,
+    new_imbalances_added: int,
+    existing_imbalances_closed: int,
+) -> None:
+    """Сохранить неудачное уведомление в БД для повторной отправки"""
+    try:
+        postgres_db_session_maker = g_globals.get_postgres_db_session_maker()
+        
+        async with postgres_db_session_maker() as session:
+            current_timestamp_ms = TimeUtils.get_aware_current_timestamp_ms()
+            
+            failed_notification = main.monitor_imbalances.schemas.FailedTelegramNotification(
+                symbol_name=symbol_name,
+                notification_timestamp_ms=current_timestamp_ms,
+                message=message,
+                new_imbalances_added=new_imbalances_added,
+                existing_imbalances_closed=existing_imbalances_closed,
+                last_retry_timestamp_ms=None,
+            )
+            
+            session.add(failed_notification)
+            await session.commit()
+            
+        logger.warning(
+            f'Saved failed Telegram notification for symbol {symbol_name!r} to DB for retry'
+        )
+        
+    except Exception as exception:
+        logger.error(
+            f'Could not save failed notification for symbol {symbol_name!r}'
+            f': {"".join(traceback.format_exception(exception))}'
+        )
+
+
+async def retry_failed_telegram_notifications() -> None:
+    """Повторная отправка неудачных уведомлений из БД"""
+    while True:
+        try:
+            postgres_db_session_maker = g_globals.get_postgres_db_session_maker()
+            
+            async with postgres_db_session_maker() as session:
+                # Получаем неудачные уведомления для повторной отправки
+                failed_notifications_result = await session.execute(
+                    select(
+                        main.monitor_imbalances.schemas.FailedTelegramNotification,
+                    ).order_by(
+                        main.monitor_imbalances.schemas.FailedTelegramNotification.notification_timestamp_ms
+                    )
+                )
+                failed_notifications = failed_notifications_result.scalars().all()
+                
+                for failed_notification in failed_notifications:
+                    try:
+                        # Пытаемся отправить уведомление повторно
+                        success = await TelegramUtils.send_message_to_channel(
+                            failed_notification.message
+                        )
+                        
+                        if success:
+                            # Успешно отправлено - удаляем из БД
+                            await session.delete(failed_notification)
+                            await session.commit()
+                            
+                            logger.info(
+                                f'Successfully retried Telegram notification for symbol '
+                                f'{failed_notification.symbol_name!r}'
+                            )
+                        else:
+                            # Снова не удалось - обновляем время последней попытки
+                            failed_notification.last_retry_timestamp_ms = TimeUtils.get_aware_current_timestamp_ms()
+                            await session.commit()
+                            
+                            logger.warning(
+                                f'Failed to retry Telegram notification for symbol '
+                                f'{failed_notification.symbol_name!r}'
+                            )
+                        
+                        # Небольшая пауза между попытками
+                        await asyncio.sleep(2.0)
+                        
+                    except Exception as exception:
+                        logger.error(
+                            f'Error retrying notification for symbol {failed_notification.symbol_name!r}: '
+                            f'{"".join(traceback.format_exception(exception))}'
+                        )
+                        
+                        # Обновляем время последней попытки даже при ошибке
+                        failed_notification.last_retry_timestamp_ms = TimeUtils.get_aware_current_timestamp_ms()
+                        await session.commit()
+            
+            # Ждем перед следующей проверкой
+            await asyncio.sleep(30.0)  # 30 секунд
+            
+        except Exception as exception:
+            logger.error(
+                f'Error in retry_failed_telegram_notifications: '
+                f'{"".join(traceback.format_exception(exception))}'
+            )
+            await asyncio.sleep(60.0)  # Ждем минуту при ошибке
 
 
 async def start_db_loop() -> None:
@@ -374,6 +483,7 @@ async def main_() -> None:
     await asyncio.gather(
         start_db_loop(),
         start_imbalances_monitoring_loop(),
+        retry_failed_telegram_notifications(),
     )
 
 

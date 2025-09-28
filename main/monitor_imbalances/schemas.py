@@ -53,3 +53,25 @@ class LongImbalanceData(Base):
     close_timestamp_ms: Mapped[int] = Column(
         BigInteger, nullable=True
     )  # Время закрытия
+
+
+class FailedTelegramNotification(Base):
+    __tablename__ = 'failed_telegram_notification'
+    __table_args__ = (
+        PrimaryKeyConstraint(  # Explicitly define composite primary key
+            'symbol_name',
+            'notification_timestamp_ms',
+        ),
+    )
+
+    # Primary key fields
+    symbol_name: Mapped[str] = Column(Text)
+    notification_timestamp_ms: Mapped[int] = Column(BigInteger)
+
+    # Attribute fields
+    message: Mapped[str] = Column(Text)
+    new_imbalances_added: Mapped[int] = Column(BigInteger, default=0)
+    existing_imbalances_closed: Mapped[int] = Column(BigInteger, default=0)
+    
+    # Метаданные
+    last_retry_timestamp_ms: Mapped[int] = Column(BigInteger, nullable=True)  # Время последней попытки
