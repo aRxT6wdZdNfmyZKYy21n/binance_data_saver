@@ -187,7 +187,7 @@ async def send_telegram_notification(
             message_parts.extend(
                 [
                     # f'🔄 *Обновление имбалансов*\n\n',
-                    f'🔄 \n\n',
+                    # f'🔄 \n\n',
                     f'Символ: `{symbol_name}`\n',
                     f'Интервал: `{_INTERVAL_NAME}`\n',
                     f'TradingView: {markdown_decoration.quote(tradingview_url)}\n',
@@ -200,7 +200,7 @@ async def send_telegram_notification(
             message_parts.extend(
                 [
                     # f'🟢 *Новые лонговые имбалансы*\n\n',
-                    f'🟢 \n\n',
+                    # f'🟢 \n\n',
                     f'Символ: `{symbol_name}`\n',
                     f'Интервал: `{_INTERVAL_NAME}`\n',
                     f'TradingView: {markdown_decoration.quote(tradingview_url)}\n',
@@ -212,7 +212,7 @@ async def send_telegram_notification(
             message_parts.extend(
                 [
                     # f'🔴 *Имбалансы закрыты*\n\n',
-                    f'🔴 \n\n',
+                    # f'🔴 \n\n',
                     f'Символ: `{symbol_name}`\n',
                     f'Интервал: `{_INTERVAL_NAME}`\n',
                     f'TradingView: {markdown_decoration.quote(tradingview_url)}\n',
@@ -232,7 +232,7 @@ async def send_telegram_notification(
 
                 message_parts.append(
                     # f'*{i}\\. Имбаланс:*\n'
-                    f'*{i}\\.* Разрыв: `{gap_percent:.2f}%`\n'
+                    f'Разрыв: `{gap_percent:.2f}%`\n'
                     # f'\n   От: `{start_price:.4f}`'
                     # f'\n   До: `{end_price:.4f}`'
                 )
