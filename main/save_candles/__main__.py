@@ -82,9 +82,7 @@ async def save_candles(
         response_body,
     )
 
-    symbol_raw_data_list: list[dict[str, typing.Any]] = response_raw_data[
-        'symbols'
-    ]
+    symbol_raw_data_list: list[dict[str, typing.Any]] = response_raw_data['symbols']
 
     for symbol_raw_data in symbol_raw_data_list:
         status_raw: str = symbol_raw_data['status']
@@ -95,7 +93,7 @@ async def save_candles(
         symbol_name = f'{symbol_raw_data["baseAsset"]}-{symbol_raw_data["quoteAsset"]}'
 
         logger.info(
-            f'Processing symbol with name {symbol_name!r}...'
+            f'Processing symbol with name {symbol_name!r}...',
         )
 
         for interval_name, interval_duration_ms in (

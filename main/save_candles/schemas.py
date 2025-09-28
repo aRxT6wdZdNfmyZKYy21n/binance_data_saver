@@ -18,9 +18,6 @@ from sqlalchemy.orm import (
     Mapped,
     # mapped_column,
 )
-from sqlalchemy.types import (
-    Enum,
-)
 
 
 class Base(AsyncAttrs, DeclarativeBase):

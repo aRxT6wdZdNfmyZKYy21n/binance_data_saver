@@ -111,16 +111,16 @@ _RSI_LINE_COLOR = '#7e57c2'
 
 _LONG_IMBALANCE_BRUSH_COLOR = QColor(
     76,  # R
-    175, # G
+    175,  # G
     80,  # B
-    127, # Alpha (полупрозрачный)
+    127,  # Alpha (полупрозрачный)
 )
 
 _LONG_IMBALANCE_PEN_COLOR = QColor(
     76,  # R
-    175, # G
+    175,  # G
     80,  # B
-    255, # Alpha (непрозрачный для контура)
+    255,  # Alpha (непрозрачный для контура)
 )
 
 
@@ -673,8 +673,14 @@ class ChartWindow(QMainWindow):
                     ] = RectItem(
                         brush_color=_LONG_IMBALANCE_BRUSH_COLOR,
                         pen_color=_LONG_IMBALANCE_PEN_COLOR,
-                        position=pyqtgraph.Point(start_timestamp_ms, start_price,),
-                        size=pyqtgraph.Point(width, height,),
+                        position=pyqtgraph.Point(
+                            start_timestamp_ms,
+                            start_price,
+                        ),
+                        size=pyqtgraph.Point(
+                            width,
+                            height,
+                        ),
                     )
 
                     candles_plot.addItem(
