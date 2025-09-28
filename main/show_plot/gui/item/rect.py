@@ -77,6 +77,9 @@ class RectItem(pyqtgraph.GraphicsObject):
     def set_size(self, value: Point) -> None:
         self.__size = value
 
+    # def setPos(self, value: Point) -> None:
+    #     super().setPos(value)
+
     def _get_pen_color(
         self,
     ) -> QColor:

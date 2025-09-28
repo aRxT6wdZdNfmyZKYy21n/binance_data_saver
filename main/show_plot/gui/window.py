@@ -3,23 +3,15 @@ from __future__ import annotations
 import asyncio
 import traceback
 import typing
-from collections import (
-    defaultdict,
-)
-from datetime import (
-    datetime,
-)
 from functools import (
     partial,
 )
 
-import numpy
 import pyqtgraph
 from chrono import (
     Timer,
 )
 from PyQt6.QtCore import (
-    QPointF,
     Qt,
 )
 from PyQt6.QtGui import (
@@ -44,6 +36,9 @@ from main.show_plot.gui.item.candlestick import (
 )
 from main.show_plot.gui.item.datetime_axis import (
     DateTimeAxisItem,
+)
+from main.show_plot.gui.item.rect import (
+    RectItem,
 )
 from utils.async_ import (
     create_task_with_exceptions_logging,
@@ -113,6 +108,20 @@ _RSI_PLOT_GRADIENT_LOWER_END_COLOR = QColor(
 )
 
 _RSI_LINE_COLOR = '#7e57c2'
+
+_LONG_IMBALANCE_BRUSH_COLOR = QColor(
+    76,  # R
+    175, # G
+    80,  # B
+    127, # Alpha (полупрозрачный)
+)
+
+_LONG_IMBALANCE_PEN_COLOR = QColor(
+    76,  # R
+    175, # G
+    80,  # B
+    255, # Alpha (непрозрачный для контура)
+)
 
 
 class ChartWindow(QMainWindow):
@@ -290,18 +299,17 @@ class ChartWindow(QMainWindow):
 
         self.__graphics_layout_widget = graphics_layout_widget
 
-        # TODO
-        """
-        self.__bollinger_bands_fill_between_item: (
-            pyqtgraph.FillBetweenItem | None
-        ) = None
-        """
-
         self.__candles_plot = candles_plot
 
         self.__drawing_lock = asyncio.Lock()
 
-        self.__price_candlestick_item_by_start_timestamp_ms_map: dict[int, CandlestickItem] = {}
+        self.__price_candlestick_item_by_start_timestamp_ms_map: dict[
+            int, CandlestickItem
+        ] = {}
+
+        self.__long_imbalance_rect_item_by_start_timestamp_ms_map: dict[
+            int, RectItem
+        ] = {}
 
         self.__processor = processor
 
@@ -375,9 +383,7 @@ class ChartWindow(QMainWindow):
     ):
         y_range = current_plot.getViewBox().viewRange()[1]
 
-        for plot in (
-            self.__candles_plot,
-        ):
+        for plot in (self.__candles_plot,):
             if plot is current_plot:
                 continue
 
@@ -427,15 +433,12 @@ class ChartWindow(QMainWindow):
     async def __on_interval_name_changed(
         self,
     ) -> None:
-        current_interval_name = (
-            self.__interval_name_combo_box.currentText()
-        )
+        current_interval_name = self.__interval_name_combo_box.currentText()
 
         processor = self.__processor
 
         if not current_interval_name or (
-            current_interval_name
-            == processor.get_current_interval_name()
+            current_interval_name == processor.get_current_interval_name()
         ):
             return
 
@@ -513,6 +516,20 @@ class ChartWindow(QMainWindow):
 
             price_candlestick_item_by_start_timestamp_ms_map.clear()
 
+            # Очищаем прямоугольники имбалансов
+            long_imbalance_rect_item_by_start_timestamp_ms_map = (
+                self.__long_imbalance_rect_item_by_start_timestamp_ms_map
+            )
+
+            for (
+                long_imbalance_rect_item
+            ) in long_imbalance_rect_item_by_start_timestamp_ms_map.values():
+                candles_plot.removeItem(
+                    long_imbalance_rect_item,
+                )
+
+            long_imbalance_rect_item_by_start_timestamp_ms_map.clear()
+
             return
 
         current_interval_name = processor.get_current_interval_name()
@@ -530,10 +547,12 @@ class ChartWindow(QMainWindow):
 
         candle_start_timestamp_ms_set: set[int] = set()
 
-        interval_duration = CommonConstants.IntervalDurationByNameMap[current_interval_name]
-        interval_duration_ms = (
-            interval_duration.total_seconds() *
-            1000  # ms
+        interval_duration = CommonConstants.IntervalDurationByNameMap[
+            current_interval_name
+        ]
+
+        interval_duration_ms = int(
+            interval_duration.total_seconds() * 1000  # ms
         )
 
         for candle_row_data in candles_dataframe.iter_rows(named=True):
@@ -574,7 +593,7 @@ class ChartWindow(QMainWindow):
                     candle_high_price,
                     candle_low_price,
                     candle_open_price,
-                    start_timestamp_ms
+                    start_timestamp_ms,
                 )
 
                 candles_plot.addItem(
@@ -599,6 +618,98 @@ class ChartWindow(QMainWindow):
                 candles_plot.removeItem(
                     price_candlestick_item,
                 )
+
+        long_imbalances_dataframe = processor.get_long_imbalances_dataframe()
+
+        long_imbalance_rect_item_by_start_timestamp_ms_map = (
+            self.__long_imbalance_rect_item_by_start_timestamp_ms_map
+        )
+
+        if long_imbalances_dataframe is not None:
+            long_imbalance_start_timestamp_ms_set: set[int] = set()
+
+            for long_imbalance_raw_data in long_imbalances_dataframe.iter_rows(
+                named=True,
+            ):
+                start_timestamp_ms: int = long_imbalance_raw_data['start_timestamp_ms']
+                start_price: float = long_imbalance_raw_data['start_price']
+                end_price: float = long_imbalance_raw_data['end_price']
+                end_timestamp_ms: int = long_imbalance_raw_data['end_timestamp_ms']
+
+                long_imbalance_start_timestamp_ms_set.add(
+                    start_timestamp_ms,
+                )
+
+                # Вычисляем размеры прямоугольника
+                width = end_timestamp_ms - start_timestamp_ms
+                height = end_price - start_price
+
+                # Создаем или обновляем прямоугольник
+                long_imbalance_rect_item = (
+                    long_imbalance_rect_item_by_start_timestamp_ms_map.get(
+                        start_timestamp_ms,
+                    )
+                )
+
+                if long_imbalance_rect_item is not None:
+                    # Обновляем существующий прямоугольник
+                    long_imbalance_rect_item.setPos(
+                        pyqtgraph.Point(
+                            start_timestamp_ms,
+                            start_price,
+                        ),
+                    )
+
+                    long_imbalance_rect_item.set_size(
+                        pyqtgraph.Point(
+                            width,
+                            height,
+                        ),
+                    )
+                else:
+                    # Создаем новый прямоугольник
+                    long_imbalance_rect_item = long_imbalance_rect_item_by_start_timestamp_ms_map[
+                        start_timestamp_ms
+                    ] = RectItem(
+                        brush_color=_LONG_IMBALANCE_BRUSH_COLOR,
+                        pen_color=_LONG_IMBALANCE_PEN_COLOR,
+                        position=pyqtgraph.Point(start_timestamp_ms, start_price,),
+                        size=pyqtgraph.Point(width, height,),
+                    )
+
+                    candles_plot.addItem(
+                        long_imbalance_rect_item,
+                    )
+
+            # Удаляем старые прямоугольники имбалансов
+            for start_timestamp_ms in tuple(
+                long_imbalance_rect_item_by_start_timestamp_ms_map,
+            ):
+                if start_timestamp_ms not in long_imbalance_start_timestamp_ms_set:
+                    print(
+                        'Removing long imbalance rect item'
+                        f' by start timestamp (ms) {start_timestamp_ms}',
+                    )
+
+                    long_imbalance_rect_item = (
+                        long_imbalance_rect_item_by_start_timestamp_ms_map.pop(
+                            start_timestamp_ms,
+                        )
+                    )
+
+                    candles_plot.removeItem(
+                        long_imbalance_rect_item,
+                    )
+        else:
+            # Если нет данных об имбалансах, очищаем все прямоугольники
+            for (
+                long_imbalance_rect_item
+            ) in long_imbalance_rect_item_by_start_timestamp_ms_map.values():
+                candles_plot.removeItem(
+                    long_imbalance_rect_item,
+                )
+
+            long_imbalance_rect_item_by_start_timestamp_ms_map.clear()
 
         if _IS_NEED_SHOW_RSI:
             rsi_series = processor.get_rsi_series()

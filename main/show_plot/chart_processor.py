@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import traceback
+import typing
+from collections import defaultdict
 from datetime import (
     UTC,
 )
@@ -56,6 +58,7 @@ class ChartProcessor:
         '__current_available_symbol_name_set',
         '__current_symbol_name',
         '__current_interval_name',
+        '__long_imbalances_dataframe',
         '__max_price',
         '__min_price',
         '__rsi_series',
@@ -73,6 +76,7 @@ class ChartProcessor:
         self.__current_available_symbol_name_set: set[str] | None = None
         self.__current_symbol_name: str | None = None
         self.__current_interval_name: str | None = None
+        self.__long_imbalances_dataframe: polars.DataFrame | None = None
         self.__max_price: Decimal | None = None
         self.__min_price: Decimal | None = None
         self.__rsi_series: Series | None = None
@@ -127,6 +131,11 @@ class ChartProcessor:
         self,
     ) -> Series | None:
         return self.__rsi_series
+
+    def get_long_imbalances_dataframe(
+        self,
+    ) -> polars.DataFrame | None:
+        return self.__long_imbalances_dataframe
 
     async def init(
         self,
@@ -189,6 +198,7 @@ class ChartProcessor:
         self.__current_symbol_name = value
 
         self.__candles_dataframe = None
+        self.__long_imbalances_dataframe = None
         self.__max_price = None
         self.__min_price = None
         self.__rsi_series = None
@@ -215,6 +225,7 @@ class ChartProcessor:
         self.__current_interval_name = value
 
         self.__candles_dataframe = None
+        self.__long_imbalances_dataframe = None
         self.__max_price = None
         self.__min_price = None
         self.__rsi_series = None
@@ -277,24 +288,21 @@ class ChartProcessor:
                         on='start_timestamp_ms',
                     )
 
-                    candles_dataframe = polars.concat([
-                        candles_dataframe,
-                        new_candles_dataframe.filter(
-                            polars.col(
-                                'start_timestamp_ms'
-                            ) >
-
-                            min_start_timestamp_ms,
-                        ),
-                    ])
+                    candles_dataframe = polars.concat(
+                        [
+                            candles_dataframe,
+                            new_candles_dataframe.filter(
+                                polars.col('start_timestamp_ms')
+                                > min_start_timestamp_ms,
+                            ),
+                        ]
+                    )
                 else:
                     candles_dataframe = new_candles_dataframe
 
                 self.__candles_dataframe = candles_dataframe
 
-        logger.info(
-            f'Candle dataframe was updated by {timer.elapsed:.3f}s'
-        )
+        logger.info(f'Candle dataframe was updated by {timer.elapsed:.3f}s')
 
         with Timer() as timer:
             self.__update_rsi_series()
@@ -303,25 +311,29 @@ class ChartProcessor:
             f'RSI series were updated by {timer.elapsed:.3f}s',
         )
 
+        with Timer() as timer:
+            self.__update_long_imbalances()
+
+        logger.info(
+            f'Long imbalances were updated by {timer.elapsed:.3f}s',
+        )
+
         await self.__window.plot(
             is_need_run_once=True,
         )
 
     @staticmethod
     def __fetch_candles_dataframe(
-            interval_name: str,
-            min_start_timestamp_ms: int,
-            symbol_id: SymbolId,
+        interval_name: str,
+        min_start_timestamp_ms: int,
+        symbol_id: SymbolId,
     ) -> DataFrame | None:
         with Timer() as timer:
             db_schema: (
-                main.save_candles.schemas.BinanceCandleData1H |
-                main.save_candles.schemas.BinanceCandleData4H |
-                main.save_candles.schemas.BinanceCandleData1D
-            ) = getattr(
-                main.save_candles.schemas,
-                f'BinanceCandleData{interval_name}'
-            )
+                main.save_candles.schemas.BinanceCandleData1H
+                | main.save_candles.schemas.BinanceCandleData4H
+                | main.save_candles.schemas.BinanceCandleData1D
+            ) = getattr(main.save_candles.schemas, f'BinanceCandleData{interval_name}')
 
             candles_dataframe = polars.read_database_uri(
                 engine='connectorx',
@@ -425,12 +437,11 @@ class ChartProcessor:
         current_interval_name = self.__current_interval_name
         if current_interval_name is not None:
             db_schema: (
-                main.save_candles.schemas.BinanceCandleData1H |
-                main.save_candles.schemas.BinanceCandleData4H |
-                main.save_candles.schemas.BinanceCandleData1D
+                main.save_candles.schemas.BinanceCandleData1H
+                | main.save_candles.schemas.BinanceCandleData4H
+                | main.save_candles.schemas.BinanceCandleData1D
             ) = getattr(
-                main.save_candles.schemas,
-                f'BinanceCandleData{current_interval_name}'
+                main.save_candles.schemas, f'BinanceCandleData{current_interval_name}'
             )
 
             postgres_db_session_maker = g_globals.get_postgres_db_session_maker()
@@ -503,9 +514,7 @@ WHERE symbol_id IS NOT NULL;
         if current_interval_name is None:
             return
 
-        candles_dataframe = (
-            self.__candles_dataframe
-        )
+        candles_dataframe = self.__candles_dataframe
 
         rsi_series: polars.Series | None
 
@@ -528,3 +537,149 @@ WHERE symbol_id IS NOT NULL;
             rsi_series = None
 
         self.__rsi_series = rsi_series
+
+    def __update_long_imbalances(
+        self,
+    ) -> None:
+        candles_dataframe = self.__candles_dataframe
+
+        if candles_dataframe is None:
+            self.__long_imbalances_dataframe = None
+
+            return
+
+        max_timestamp_ms = candles_dataframe.get_column(
+            'start_timestamp_ms',
+        ).max()
+
+        # Получаем данные свечей
+        candles_data = candles_dataframe.to_dicts()
+
+        if len(candles_data) < 3:
+            self.__long_imbalances_dataframe = None
+
+            return
+
+        active_imbalance_raw_data_list_by_start_price_map: typing.DefaultDict[
+            float, list[dict[str, typing.Any]]
+        ] = defaultdict(
+            list,
+        )
+
+        inactive_imbalance_raw_data_list: list[dict[str, typing.Any]] = []
+
+        # Проходим по всем возможным тройкам свечей
+        for i in range(len(candles_data) - 2):
+            candle1 = candles_data[i]
+            candle2 = candles_data[i + 1]
+            candle3 = candles_data[i + 2]
+
+            low_price: float = candle3['low_price']
+            high_price: float = candle3['high_price']
+
+            # Определяем временные метки
+            start_timestamp_ms = candle3['start_timestamp_ms']
+
+            prices_to_remove: list[float] | None = None
+
+            for (
+                price,
+                active_imbalance_raw_data_list,
+            ) in active_imbalance_raw_data_list_by_start_price_map.items():
+                if not (low_price <= price <= high_price):
+                    continue
+
+                for imbalance_raw_data in active_imbalance_raw_data_list:
+                    imbalance_raw_data['end_timestamp_ms'] = start_timestamp_ms
+
+                    inactive_imbalance_raw_data_list.append(
+                        imbalance_raw_data,
+                    )
+
+                active_imbalance_raw_data_list.clear()
+
+                if prices_to_remove is None:
+                    prices_to_remove = []
+
+                prices_to_remove.append(
+                    price,
+                )
+
+            if prices_to_remove is not None:
+                for price in prices_to_remove:
+                    (active_imbalance_raw_data_list_by_start_price_map.pop(price),)
+
+                prices_to_remove.clear()
+                prices_to_remove = None  # noqa
+
+            # Проверяем, что вторая свеча бычья (close > open)
+            if candle2['close_price'] <= candle2['open_price']:
+                continue
+
+            # Определяем цены X и Y
+            start_price = candle1['high_price']  # X
+            end_price: float = candle3['low_price']  # Y
+
+            # Проверяем условие Y > X (есть разрыв)
+            if end_price <= start_price:
+                continue
+
+            active_imbalance_raw_data_list = (
+                active_imbalance_raw_data_list_by_start_price_map[start_price]
+            )
+
+            active_imbalance_raw_data_list.append(
+                {
+                    'start_timestamp_ms': start_timestamp_ms,
+                    'start_price': start_price,
+                    'end_price': end_price,
+                    'end_timestamp_ms': None,
+                },
+            )
+
+        for (
+            imbalance_raw_data_list
+        ) in active_imbalance_raw_data_list_by_start_price_map.values():
+            for imbalance_raw_data in imbalance_raw_data_list:
+                imbalance_raw_data['end_timestamp_ms'] = max_timestamp_ms
+
+                inactive_imbalance_raw_data_list.append(
+                    imbalance_raw_data,
+                )
+
+            imbalance_raw_data_list.clear()
+
+        active_imbalance_raw_data_list_by_start_price_map.clear()
+
+        # Создаем датафрейм из списка имбалансов
+        if inactive_imbalance_raw_data_list:
+            long_imbalances_dataframe = polars.DataFrame(
+                inactive_imbalance_raw_data_list,
+            )
+
+            self.__long_imbalances_dataframe = long_imbalances_dataframe.sort(
+                by='start_timestamp_ms',
+            )
+        else:
+            self.__long_imbalances_dataframe = None
+
+    def __check_imbalance_filling(
+        self,
+        start_price: float,
+        end_price: float,
+        start_index: int,
+        candles_data: list[dict],
+    ) -> int | None:
+        """
+        Проверяет, закрыт ли имбаланс последующими свечами.
+        Возвращает timestamp_ms свечи, которая закрыла имбаланс, или None если не закрыт.
+        """
+        for i in range(start_index, len(candles_data)):
+            candle = candles_data[i]
+
+            # Проверяем, пересекает ли свеча диапазон имбаланса
+            # Имбаланс считается закрытым, если свеча пересекает диапазон [end_price, start_price]
+            if candle['low_price'] <= start_price and candle['high_price'] >= end_price:
+                return candle['start_timestamp_ms']
+
+        return None

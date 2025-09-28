@@ -115,9 +115,9 @@ async def save_candles(
             postgres_db_session_maker = g_globals.get_postgres_db_session_maker()
 
             db_schema: (
-                type[schemas.BinanceCandleData1H] |
-                type[schemas.BinanceCandleData4H] |
-                type[schemas.BinanceCandleData1D]
+                type[schemas.BinanceCandleData1H]
+                | type[schemas.BinanceCandleData4H]
+                | type[schemas.BinanceCandleData1D]
             ) = getattr(
                 schemas,
                 f'BinanceCandleData{interval_name}',
@@ -147,9 +147,9 @@ async def save_candles(
 
             if is_last_candle_exists:
                 last_candle_data: (
-                    schemas.BinanceCandleData1H |
-                    schemas.BinanceCandleData4H |
-                    schemas.BinanceCandleData1D
+                    schemas.BinanceCandleData1H
+                    | schemas.BinanceCandleData4H
+                    | schemas.BinanceCandleData1D
                 )
 
                 (last_candle_data,) = row_data
@@ -173,10 +173,7 @@ async def save_candles(
             response = await api_session.get(
                 url='/fapi/v1/klines',
                 params={
-                    'symbol': symbol_name.replace(
-                        '-',
-                        ''
-                    ),
+                    'symbol': symbol_name.replace('-', ''),
                     'interval': interval_name.lower(),
                     # 'endTime': (
                     #     last_candle_timestamp_ms
@@ -194,7 +191,9 @@ async def save_candles(
 
             response_body = await response.aread()
 
-            candle_tuples: list[tuple[int, str, str, str, str, str, int, str, int, str, str, str]] = orjson.loads(
+            candle_tuples: list[
+                tuple[int, str, str, str, str, str, int, str, int, str, str, str]
+            ] = orjson.loads(
                 response_body,
             )
 

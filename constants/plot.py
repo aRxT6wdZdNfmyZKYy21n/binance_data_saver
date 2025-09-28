@@ -4,5 +4,5 @@ class PlotConstants:
     IntervalNames = [
         '1H',
         '4H',
-        '1D'
+        '1D',
     ]
