@@ -80,7 +80,7 @@ class CandlestickItem(RectItem):
         painter.setPen(
             pyqtgraph.mkPen(
                 self._get_pen_color(),
-                width=2,
+                width=1,
             ),
         )
 
