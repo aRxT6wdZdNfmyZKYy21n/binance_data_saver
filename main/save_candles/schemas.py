@@ -52,8 +52,6 @@ class BinanceCandleData1H(Base):
 
     # Attribute fields
 
-    is_closed: Mapped[bool] = Column(Boolean)
-
     close_price: Mapped[Decimal] = Column(Numeric)
     high_price: Mapped[Decimal] = Column(Numeric)
     low_price: Mapped[Decimal] = Column(Numeric)
@@ -89,8 +87,6 @@ class BinanceCandleData4H(Base):
 
     # Attribute fields
 
-    is_closed: Mapped[bool] = Column(Boolean)
-
     close_price: Mapped[Decimal] = Column(Numeric)
     high_price: Mapped[Decimal] = Column(Numeric)
     low_price: Mapped[Decimal] = Column(Numeric)
@@ -125,8 +121,6 @@ class BinanceCandleData1D(Base):
     start_timestamp_ms: Mapped[int] = Column(BigInteger)
 
     # Attribute fields
-
-    is_closed: Mapped[bool] = Column(Boolean)
 
     close_price: Mapped[Decimal] = Column(Numeric)
     high_price: Mapped[Decimal] = Column(Numeric)
