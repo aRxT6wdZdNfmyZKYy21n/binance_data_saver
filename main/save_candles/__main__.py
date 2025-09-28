@@ -194,23 +194,8 @@ async def save_candles(
 
             response_body = await response.aread()
 
-            response_raw_data = orjson.loads(
+            candle_tuples: list[tuple[int, str, str, str, str, str, int, str, int, str, str, str]] = orjson.loads(
                 response_body,
-            )
-
-            code: str = response_raw_data.pop(
-                'code',
-            )
-
-            assert code == '0', (
-                code,
-                response_raw_data,
-            )
-
-            candle_tuples: list[tuple[int, str, str, str, str, str, int, str, int, str, str, str]] = (
-                response_raw_data.pop(
-                    'data',
-                )
             )
 
             candle_raw_data_list_to_insert: list[dict[str, typing.Any]] = []
