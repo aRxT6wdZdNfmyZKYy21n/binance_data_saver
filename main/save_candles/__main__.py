@@ -178,13 +178,13 @@ async def save_candles(
                         ''
                     ),
                     'interval': interval_name.lower(),
-                    'endTime': (
-                        last_candle_timestamp_ms
-                        + (
-                            interval_duration_ms  # ms
-                            * _CANDLES_COUNT_PER_REQUEST
-                        )
-                    ),
+                    # 'endTime': (
+                    #     last_candle_timestamp_ms
+                    #     + (
+                    #         interval_duration_ms  # ms
+                    #         * _CANDLES_COUNT_PER_REQUEST
+                    #     )
+                    # ),
                     'startTime': last_candle_timestamp_ms,
                     'limit': _CANDLES_COUNT_PER_REQUEST,
                 },
