@@ -175,7 +175,7 @@ async def save_candles(
                 params={
                     'symbol': symbol_name.replace(
                         '-',
-                        '_'
+                        ''
                     ),
                     'interval': interval_name.lower(),
                     'endTime': (
