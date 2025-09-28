@@ -7,8 +7,6 @@ from decimal import Decimal
 import httpx
 import orjson
 
-from constants.symbol import SymbolConstants
-
 try:
     import uvloop
 except ImportError:
@@ -39,11 +37,6 @@ logger = logging.getLogger(
 
 
 _CANDLES_COUNT_PER_REQUEST = 500
-
-_SYMBOL_NAMES = [
-    'BTC-USDT',
-    'ETH-USDT',
-]
 
 
 async def init_db_models():
@@ -77,8 +70,33 @@ async def start_db_loop() -> None:
 async def save_candles(
     api_session: httpx.AsyncClient,
 ) -> None:
-    for symbol_name in _SYMBOL_NAMES:
-        symbol_id = SymbolConstants.IdByName[symbol_name]
+    response = await api_session.get(
+        url='/fapi/v1/exchangeInfo',
+    )
+
+    response.raise_for_status()
+
+    response_body = await response.aread()
+
+    response_raw_data: dict[str, typing.Any] = orjson.loads(
+        response_body,
+    )
+
+    symbol_raw_data_list: list[dict[str, typing.Any]] = response_raw_data[
+        'symbols'
+    ]
+
+    for symbol_raw_data in symbol_raw_data_list:
+        status_raw: str = symbol_raw_data['status']
+
+        if status_raw != 'TRADING':
+            continue
+
+        symbol_name = f'{symbol_raw_data["baseAsset"]}-{symbol_raw_data["quoteAsset"]}'
+
+        logger.info(
+            f'Processing symbol with name {symbol_name!r}...'
+        )
 
         for interval_name, interval_duration_ms in (
             (
@@ -129,7 +147,7 @@ async def save_candles(
                         db_schema,
                     )
                     .where(
-                        db_schema.symbol_id == symbol_id,
+                        db_schema.symbol_name == symbol_name,
                     )
                     .order_by(
                         db_schema.start_timestamp_ms.desc(),
@@ -162,7 +180,7 @@ async def save_candles(
                     * 60  # m
                     * 24  # h
                     * 365  # d
-                    * 10  # y
+                    * 20  # y
                 )
 
             logger.info(
@@ -250,9 +268,7 @@ async def save_candles(
 
                 candle_raw_data = dict(
                     # Primary key fields
-                    symbol_id=int(
-                        symbol_id.value,
-                    ),
+                    symbol_name=symbol_name,
                     start_timestamp_ms=candle_start_timestamp_ms,
                     # Attribute fields
                     close_price=candle_close_price,
@@ -296,7 +312,7 @@ async def save_candles(
                         # Remove primary key
 
                         candle_raw_data_to_update.pop(
-                            'symbol_id',
+                            'symbol_name',
                         )
 
                         start_timestamp_ms: int = candle_raw_data_to_update.pop(
@@ -312,7 +328,7 @@ async def save_candles(
                             )
                             .where(
                                 and_(
-                                    db_schema.symbol_id == symbol_id,
+                                    db_schema.symbol_name == symbol_name,
                                     (
                                         db_schema.start_timestamp_ms
                                         == start_timestamp_ms

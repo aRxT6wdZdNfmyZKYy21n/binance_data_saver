@@ -261,8 +261,6 @@ class ChartProcessor:
         if current_symbol_name is None:
             return
 
-        current_symbol_id = SymbolConstants.IdByName[current_symbol_name]
-
         async with self.__candles_dataframe_update_lock:
             with Timer() as timer:
                 old_candles_dataframe = self.__candles_dataframe
@@ -277,7 +275,7 @@ class ChartProcessor:
                 new_candles_dataframe = self.__fetch_candles_dataframe(
                     interval_name=current_interval_name,
                     min_start_timestamp_ms=min_start_timestamp_ms,
-                    symbol_id=current_symbol_id,
+                    symbol_name=current_symbol_name,
                 )
 
                 candles_dataframe: polars.DataFrame
@@ -326,7 +324,7 @@ class ChartProcessor:
     def __fetch_candles_dataframe(
         interval_name: str,
         min_start_timestamp_ms: int,
-        symbol_id: SymbolId,
+        symbol_name: str,
     ) -> DataFrame | None:
         with Timer() as timer:
             db_schema: (
@@ -353,10 +351,10 @@ class ChartProcessor:
                     ', volume_quote_currency'
                     f' FROM "{db_schema.__tablename__}"'
                     ' WHERE'
-                    f' symbol_id = {symbol_id.name!r}'
+                    f' symbol_name = {symbol_name!r}'
                     f' AND start_timestamp_ms >= {min_start_timestamp_ms!r}'
                     ' ORDER BY'
-                    ' symbol_id ASC'
+                    ' symbol_name ASC'
                     ', start_timestamp_ms DESC'
                     # f' LIMIT {15_000_000!r}'
                     # f' LIMIT {10_000_000!r}'
@@ -451,27 +449,27 @@ class ChartProcessor:
             async with postgres_db_session_maker() as session:
                 recursive_cte_full_query = text(
                     f"""
-WITH RECURSIVE symbol_id_cte(symbol_id) AS 
+WITH RECURSIVE symbol_name_cte(symbol_name) AS 
 (
   (
-    SELECT {table_name}.symbol_id AS symbol_id 
-    FROM {table_name} ORDER BY {table_name}.symbol_id ASC 
+    SELECT {table_name}.symbol_name AS symbol_name 
+    FROM {table_name} ORDER BY {table_name}.symbol_name ASC 
     LIMIT 1
   )
   UNION ALL
   SELECT (
-    SELECT symbol_id
+    SELECT symbol_name
     FROM {table_name}
-    WHERE symbol_id > cte.symbol_id
-    ORDER BY symbol_id ASC
+    WHERE symbol_name > cte.symbol_name
+    ORDER BY symbol_name ASC
     LIMIT 1
   )
-  FROM symbol_id_cte AS cte
-  WHERE cte.symbol_id IS NOT NULL
+  FROM symbol_name_cte AS cte
+  WHERE cte.symbol_name IS NOT NULL
 )
-SELECT symbol_id
-FROM symbol_id_cte
-WHERE symbol_id IS NOT NULL;
+SELECT symbol_name
+FROM symbol_name_cte
+WHERE symbol_name IS NOT NULL;
                     """
                 )
 
@@ -480,14 +478,7 @@ WHERE symbol_id IS NOT NULL;
                 )
 
                 for row in result:
-                    symbol_id_raw: str = row.symbol_id
-
-                    symbol_id = getattr(
-                        SymbolId,
-                        symbol_id_raw,
-                    )
-
-                    symbol_name = SymbolConstants.NameById[symbol_id]
+                    symbol_name: str = row.symbol_name
 
                     if current_available_symbol_name_set is None:
                         current_available_symbol_name_set = set()
@@ -622,6 +613,9 @@ WHERE symbol_id IS NOT NULL;
 
             # Проверяем условие Y > X (есть разрыв)
             if end_price <= start_price:
+                continue
+
+            if end_price / start_price <= 1.05:  # 5%
                 continue
 
             active_imbalance_raw_data_list = (

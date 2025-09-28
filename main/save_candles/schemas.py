@@ -4,11 +4,11 @@ from decimal import (
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     Column,
     Integer,
     Numeric,
     PrimaryKeyConstraint,
+    Text,
 )
 from sqlalchemy.ext.asyncio import (
     AsyncAttrs,
@@ -20,10 +20,6 @@ from sqlalchemy.orm import (
 )
 from sqlalchemy.types import (
     Enum,
-)
-
-from enumerations import (
-    SymbolId,
 )
 
 
@@ -42,10 +38,8 @@ class BinanceCandleData1H(Base):
 
     # Primary key fields
 
-    symbol_id: Mapped[SymbolId] = Column(
-        Enum(
-            SymbolId,
-        ),
+    symbol_name: Mapped[str] = Column(
+        Text,
     )
 
     start_timestamp_ms: Mapped[int] = Column(BigInteger)
@@ -77,10 +71,8 @@ class BinanceCandleData4H(Base):
 
     # Primary key fields
 
-    symbol_id: Mapped[SymbolId] = Column(
-        Enum(
-            SymbolId,
-        ),
+    symbol_name: Mapped[str] = Column(
+        Text,
     )
 
     start_timestamp_ms: Mapped[int] = Column(BigInteger)
@@ -112,10 +104,8 @@ class BinanceCandleData1D(Base):
 
     # Primary key fields
 
-    symbol_id: Mapped[SymbolId] = Column(
-        Enum(
-            SymbolId,
-        ),
+    symbol_name: Mapped[str] = Column(
+        Text,
     )
 
     start_timestamp_ms: Mapped[int] = Column(BigInteger)
