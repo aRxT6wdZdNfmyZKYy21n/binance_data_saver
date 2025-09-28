@@ -207,7 +207,7 @@ async def save_candles(
                 response_raw_data,
             )
 
-            candle_tuples: list[tuple[int, str, str, str, str, str, int, str, str, str]] = (
+            candle_tuples: list[tuple[int, str, str, str, str, str, int, str, int, str, str, str]] = (
                 response_raw_data.pop(
                     'data',
                 )
@@ -223,6 +223,8 @@ async def save_candles(
                     candle_high_price_raw,
                     candle_low_price_raw,
                     candle_close_price_raw,
+                    candle_volume_raw,
+                    candle_close_timestamp_ms,
                     candle_volume_quote_currency_raw,
                     candle_trades_count,
                     candle_taker_buy_volume_base_currency_raw,
@@ -254,6 +256,10 @@ async def save_candles(
                     candle_taker_buy_volume_quote_currency_raw,
                 )
 
+                candle_volume = Decimal(
+                    candle_volume_raw,
+                )
+
                 candle_volume_quote_currency = Decimal(
                     candle_volume_quote_currency_raw,
                 )
@@ -272,6 +278,7 @@ async def save_candles(
                     taker_buy_volume_base_currency=candle_taker_buy_volume_base_currency,
                     taker_buy_volume_quote_currency=candle_taker_buy_volume_quote_currency,
                     trades_count=candle_trades_count,
+                    volume=candle_volume,
                     volume_quote_currency=candle_volume_quote_currency,
                 )
 

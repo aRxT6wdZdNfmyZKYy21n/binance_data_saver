@@ -64,6 +64,7 @@ class BinanceCandleData1H(Base):
 
     trades_count: Mapped[int] = Column(Integer)
 
+    volume: Mapped[Decimal] = Column(Numeric)
     volume_quote_currency: Mapped[Decimal] = Column(Numeric)
 
 
@@ -100,6 +101,7 @@ class BinanceCandleData4H(Base):
 
     trades_count: Mapped[int] = Column(Integer)
 
+    volume: Mapped[Decimal] = Column(Numeric)
     volume_quote_currency: Mapped[Decimal] = Column(Numeric)
 
 
@@ -136,4 +138,5 @@ class BinanceCandleData1D(Base):
 
     trades_count: Mapped[int] = Column(Integer)
 
+    volume: Mapped[Decimal] = Column(Numeric)
     volume_quote_currency: Mapped[Decimal] = Column(Numeric)
