@@ -6,6 +6,9 @@ from decimal import (
 )
 
 import polars
+from aiogram.utils.text_decorations import (
+    markdown_decoration,
+)
 from sqlalchemy import (
     select,
     text,
@@ -177,6 +180,8 @@ async def send_telegram_notification(
     try:
         message_parts = []
 
+        tradingview_url = f'https://ru.tradingview.com/chart/?symbol=BINANCE%3A{symbol_name.replace("-", "")}.P'
+
         if new_imbalances_added > 0 and existing_imbalances_closed > 0:
             # И новые, и закрытые
             message_parts.extend(
@@ -185,6 +190,7 @@ async def send_telegram_notification(
                     f'🔄 \n\n',
                     f'Символ: `{symbol_name}`\n',
                     f'Интервал: `{_INTERVAL_NAME}`\n',
+                    f'TradingView: {markdown_decoration.quote(tradingview_url)}\n',
                     # f'Новых: `+{new_imbalances_added}`\n',
                     # f'Закрытых: `-{existing_imbalances_closed}`\n\n',
                 ]
@@ -196,7 +202,8 @@ async def send_telegram_notification(
                     # f'🟢 *Новые лонговые имбалансы*\n\n',
                     f'🟢 \n\n',
                     f'Символ: `{symbol_name}`\n',
-                    # f'Интервал: `{_INTERVAL_NAME}`\n',
+                    f'Интервал: `{_INTERVAL_NAME}`\n',
+                    f'TradingView: {markdown_decoration.quote(tradingview_url)}\n',
                     # f'Количество: `+{new_imbalances_added}`\n\n',
                 ]
             )
@@ -208,6 +215,7 @@ async def send_telegram_notification(
                     f'🔴 \n\n',
                     f'Символ: `{symbol_name}`\n',
                     f'Интервал: `{_INTERVAL_NAME}`\n',
+                    f'TradingView: {markdown_decoration.quote(tradingview_url)}\n',
                     # f'Закрыто: `-{existing_imbalances_closed}`\n\n',
                 ]
             )
@@ -224,7 +232,7 @@ async def send_telegram_notification(
 
                 message_parts.append(
                     # f'*{i}\\. Имбаланс:*\n'
-                    f'*{i}\\.* Разрыв: `{gap_percent:.2f}%`'
+                    f'*{i}\\.* Разрыв: `{gap_percent:.2f}%`\n'
                     # f'\n   От: `{start_price:.4f}`'
                     # f'\n   До: `{end_price:.4f}`'
                 )
