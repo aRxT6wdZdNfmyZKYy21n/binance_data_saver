@@ -31,7 +31,7 @@ class BinanceCandleData1H(Base):
     __tablename__ = 'binance_candle_data_1H'
     __table_args__ = (
         PrimaryKeyConstraint(  # Explicitly define composite primary key
-            'symbol_id',
+            'symbol_name',
             'start_timestamp_ms',
         ),
     )
@@ -64,7 +64,7 @@ class BinanceCandleData4H(Base):
     __tablename__ = 'binance_candle_data_4H'
     __table_args__ = (
         PrimaryKeyConstraint(  # Explicitly define composite primary key
-            'symbol_id',
+            'symbol_name',
             'start_timestamp_ms',
         ),
     )
@@ -97,7 +97,7 @@ class BinanceCandleData1D(Base):
     __tablename__ = 'binance_candle_data_1D'
     __table_args__ = (
         PrimaryKeyConstraint(  # Explicitly define composite primary key
-            'symbol_id',
+            'symbol_name',
             'start_timestamp_ms',
         ),
     )
