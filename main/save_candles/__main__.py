@@ -173,7 +173,10 @@ async def save_candles(
             response = await api_session.get(
                 url='/fapi/v1/klines',
                 params={
-                    'symbol': symbol_name,
+                    'symbol': symbol_name.replace(
+                        '-',
+                        '_'
+                    ),
                     'interval': interval_name.lower(),
                     'endTime': (
                         last_candle_timestamp_ms
