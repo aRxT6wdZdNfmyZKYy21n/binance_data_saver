@@ -10,7 +10,8 @@ from sqlalchemy import (
     DateTime,
     Numeric,
     PrimaryKeyConstraint,
-    Text, Boolean,
+    Text,
+    Boolean,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -36,13 +37,19 @@ class LongImbalanceData(Base):
     # Primary key fields
     symbol_name: Mapped[str] = Column(Text)
     start_timestamp_ms: Mapped[int] = Column(BigInteger)
-    detection_timestamp_ms: Mapped[int] = Column(BigInteger)  # Время обнаружения имбаланса
+    detection_timestamp_ms: Mapped[int] = Column(
+        BigInteger
+    )  # Время обнаружения имбаланса
 
     # Attribute fields
     start_price: Mapped[Decimal] = Column(Numeric)
     end_price: Mapped[Decimal] = Column(Numeric)
-    end_timestamp_ms: Mapped[int] = Column(BigInteger)  # None если имбаланс еще не закрыт
-    
+    end_timestamp_ms: Mapped[int] = Column(
+        BigInteger
+    )  # None если имбаланс еще не закрыт
+
     # Метаданные
     is_closed: Mapped[bool] = Column(Boolean, default=False)  # Закрыт ли имбаланс
-    close_timestamp_ms: Mapped[int] = Column(BigInteger, nullable=True)  # Время закрытия
+    close_timestamp_ms: Mapped[int] = Column(
+        BigInteger, nullable=True
+    )  # Время закрытия

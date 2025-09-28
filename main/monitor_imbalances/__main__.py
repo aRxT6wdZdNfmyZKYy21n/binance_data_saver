@@ -66,7 +66,9 @@ async def process_symbol(
     )
 
     if candles_dataframe is None:
-        logger.warning(f'Could not fetch candles for symbol {symbol_name!r}')
+        logger.warning(
+            f'Could not fetch candles for symbol {symbol_name!r}',
+        )
         return
 
     # 2. Создаем датафрейм с имбалансами
@@ -80,8 +82,9 @@ async def process_symbol(
             select(
                 main.monitor_imbalances.schemas.LongImbalanceData,
             ).where(
-                main.monitor_imbalances.schemas.LongImbalanceData.symbol_name == symbol_name,
-                main.monitor_imbalances.schemas.LongImbalanceData.is_closed == False,
+                main.monitor_imbalances.schemas.LongImbalanceData.symbol_name
+                == symbol_name,
+                # main.monitor_imbalances.schemas.LongImbalanceData.is_closed == False,
             )
         )
         existing_imbalances = existing_imbalances_result.scalars().all()
@@ -92,8 +95,8 @@ async def process_symbol(
     existing_imbalances_closed = 0
 
     if long_imbalances_dataframe is not None:
-        new_imbalances_data = long_imbalances_dataframe.to_dicts()
-        
+        new_imbalances = long_imbalances_dataframe.to_dicts()
+
         # Создаем множество существующих имбалансов для быстрого поиска
         existing_imbalance_keys = {
             (imb.start_timestamp_ms, float(imb.start_price), float(imb.end_price))
@@ -102,24 +105,26 @@ async def process_symbol(
 
         # Добавляем новые имбалансы
         async with session.begin():
-            for imbalance_data in new_imbalances_data:
+            for imbalance_raw_data in new_imbalances:
                 imbalance_key = (
-                    imbalance_data['start_timestamp_ms'],
-                    imbalance_data['start_price'],
-                    imbalance_data['end_price']
+                    imbalance_raw_data['start_timestamp_ms'],
+                    imbalance_raw_data['start_price'],
+                    imbalance_raw_data['end_price'],
                 )
-                
+
                 if imbalance_key not in existing_imbalance_keys:
                     # Это новый имбаланс - добавляем в БД
                     new_imbalance = main.monitor_imbalances.schemas.LongImbalanceData(
                         symbol_name=symbol_name,
-                        start_timestamp_ms=imbalance_data['start_timestamp_ms'],
+                        start_timestamp_ms=imbalance_raw_data['start_timestamp_ms'],
                         detection_timestamp_ms=current_timestamp_ms,
-                        start_price=Decimal(str(imbalance_data['start_price'])),
-                        end_price=Decimal(str(imbalance_data['end_price'])),
-                        end_timestamp_ms=imbalance_data['end_timestamp_ms'],
-                        is_closed=False if imbalance_data['end_timestamp_ms'] is None else True,
-                        close_timestamp_ms=imbalance_data['end_timestamp_ms'],
+                        start_price=Decimal(str(imbalance_raw_data['start_price'])),
+                        end_price=Decimal(str(imbalance_raw_data['end_price'])),
+                        end_timestamp_ms=imbalance_raw_data['end_timestamp_ms'],
+                        is_closed=False
+                        if imbalance_raw_data['end_timestamp_ms'] is None
+                        else True,
+                        close_timestamp_ms=imbalance_raw_data['end_timestamp_ms'],
                     )
                     session.add(new_imbalance)
                     new_imbalances_added += 1
@@ -129,7 +134,7 @@ async def process_symbol(
         # Проверяем, какие существующие имбалансы нужно закрыть
         current_imbalance_keys = {
             (imb['start_timestamp_ms'], imb['start_price'], imb['end_price'])
-            for imb in new_imbalances_data
+            for imb in new_imbalances
         }
 
         async with session.begin():
@@ -137,9 +142,9 @@ async def process_symbol(
                 existing_key = (
                     existing_imbalance.start_timestamp_ms,
                     float(existing_imbalance.start_price),
-                    float(existing_imbalance.end_price)
+                    float(existing_imbalance.end_price),
                 )
-                
+
                 if existing_key not in current_imbalance_keys:
                     # Этот имбаланс больше не активен - закрываем его
                     existing_imbalance.is_closed = True
@@ -151,12 +156,12 @@ async def process_symbol(
     # 5. Отправляем уведомление в Telegram при изменениях
     if new_imbalances_added > 0 or existing_imbalances_closed > 0:
         await send_telegram_notification(
-            symbol_name, 
+            symbol_name,
             long_imbalances_dataframe,
             new_imbalances_added,
-            existing_imbalances_closed
+            existing_imbalances_closed,
         )
-        
+
         logger.info(
             f'Processed symbol {symbol_name!r}: +{new_imbalances_added} new, -{existing_imbalances_closed} closed'
         )
@@ -167,41 +172,47 @@ async def send_telegram_notification(
     long_imbalances_dataframe: polars.DataFrame | None,
     new_imbalances_added: int = 0,
     existing_imbalances_closed: int = 0,
-) -> None:
+) -> bool:
     """Отправить уведомление в Telegram о изменениях в имбалансах"""
     try:
         message_parts = []
-        
+
         if new_imbalances_added > 0 and existing_imbalances_closed > 0:
             # И новые, и закрытые
-            message_parts.extend([
-                f'🔄 *Обновление имбалансов*\n\n',
-                f'Символ: `{symbol_name}`\n',
-                f'Интервал: `{_INTERVAL_NAME}`\n',
-                f'Новых: `+{new_imbalances_added}`\n',
-                f'Закрытых: `-{existing_imbalances_closed}`\n\n',
-            ])
+            message_parts.extend(
+                [
+                    f'🔄 *Обновление имбалансов*\n\n',
+                    f'Символ: `{symbol_name}`\n',
+                    f'Интервал: `{_INTERVAL_NAME}`\n',
+                    f'Новых: `+{new_imbalances_added}`\n',
+                    f'Закрытых: `-{existing_imbalances_closed}`\n\n',
+                ]
+            )
         elif new_imbalances_added > 0:
             # Только новые
-            message_parts.extend([
-                f'🟢 *Новые лонговые имбалансы*\n\n',
-                f'Символ: `{symbol_name}`\n',
-                f'Интервал: `{_INTERVAL_NAME}`\n',
-                f'Количество: `+{new_imbalances_added}`\n\n',
-            ])
+            message_parts.extend(
+                [
+                    f'🟢 *Новые лонговые имбалансы*\n\n',
+                    f'Символ: `{symbol_name}`\n',
+                    f'Интервал: `{_INTERVAL_NAME}`\n',
+                    f'Количество: `+{new_imbalances_added}`\n\n',
+                ]
+            )
         elif existing_imbalances_closed > 0:
             # Только закрытые
-            message_parts.extend([
-                f'🔴 *Имбалансы закрыты*\n\n',
-                f'Символ: `{symbol_name}`\n',
-                f'Интервал: `{_INTERVAL_NAME}`\n',
-                f'Закрыто: `-{existing_imbalances_closed}`\n\n',
-            ])
+            message_parts.extend(
+                [
+                    f'🔴 *Имбалансы закрыты*\n\n',
+                    f'Символ: `{symbol_name}`\n',
+                    f'Интервал: `{_INTERVAL_NAME}`\n',
+                    f'Закрыто: `-{existing_imbalances_closed}`\n\n',
+                ]
+            )
 
         # Показываем детали только если есть новые имбалансы
         if new_imbalances_added > 0 and long_imbalances_dataframe is not None:
             imbalances_data = long_imbalances_dataframe.to_dicts()
-            
+
             # Показываем только первые 5 новых имбалансов
             for i, imbalance in enumerate(imbalances_data[:5], 1):
                 start_price = imbalance['start_price']
@@ -222,15 +233,25 @@ async def send_telegram_notification(
 
         message = ''.join(message_parts)
 
-        await TelegramUtils.send_message_to_channel(message)
+        if not await TelegramUtils.send_message_to_channel(
+            message,
+        ):
+            return False
 
         logger.info(f'Sent Telegram notification for symbol {symbol_name!r}')
 
+        await asyncio.sleep(
+            5.0  # s
+        )
+
+        return True
     except Exception as exception:
         logger.error(
             f'Could not send Telegram notification for symbol {symbol_name!r}'
             f': {"".join(traceback.format_exception(exception))}'
         )
+
+        return False
 
 
 async def start_db_loop() -> None:

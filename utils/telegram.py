@@ -12,7 +12,7 @@ from aiogram.enums import (
     ParseMode,
 )
 
-_CHAT_ID = -1002403348867
+_CHAT_ID = -1003016117269
 
 
 logger = logging.getLogger(
@@ -38,7 +38,7 @@ class TelegramUtils:
     async def send_message_to_channel(
         cls,
         message_markdown_text: str,
-    ) -> None:
+    ) -> bool:
         aiogram_bot_token = os.getenv(
             'TELEGRAM_BOT_TOKEN',
         )
@@ -55,6 +55,8 @@ class TelegramUtils:
                     chat_id=_CHAT_ID,
                     text=message_markdown_text,
                 )
+
+                return True
         except Exception as exception:
             logger.error(
                 'Could not send message'
@@ -63,3 +65,5 @@ class TelegramUtils:
                 ': handled exception'
                 f': {"".join(traceback.format_exception(exception))}'
             )
+
+            return False
