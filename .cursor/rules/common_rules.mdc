@@ -30,5 +30,5 @@ except Exception as exception:
     logger.error(f'Handled exception: {"".join(traceback.format_exception(exception))}')
 ```
 - В ситуациях неопределённости лучше задавать вопросы
-- Если виртуальное окружение есть (в папках "venv" или ".venv"), его следует активировать перед выполнением скриптов
+- Виртуальное окружение есть и находится в папке ".venv". Его следует активировать перед выполнением скриптов.
 - Скрипты Python следует запускать через модули, например: `python3 -m ai_code.check_tables_integrity`

@@ -161,7 +161,7 @@ class Globals:
         if candles_dataframe is None:
             return None
 
-        max_timestamp_ms = candles_dataframe.get_column('start_timestamp_ms').max()
+        # max_timestamp_ms = candles_dataframe.get_column('start_timestamp_ms').max()
 
         # Получаем данные свечей
         candles_data = candles_dataframe.to_dicts()
