@@ -297,7 +297,8 @@ async def start_imbalances_monitoring_loop() -> None:
             )
 
         await asyncio.sleep(
-            15.0  # s
+            60.0 *  # s
+            10.0    # m
         )
 
 
