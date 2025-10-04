@@ -164,7 +164,7 @@ class Globals:
         # max_timestamp_ms = candles_dataframe.get_column('start_timestamp_ms').max()
 
         # Получаем данные свечей
-        candles_data = candles_dataframe.to_dicts()
+        candles_data = candles_dataframe.to_dicts()[:-1]
 
         if len(candles_data) < 3:
             return None
