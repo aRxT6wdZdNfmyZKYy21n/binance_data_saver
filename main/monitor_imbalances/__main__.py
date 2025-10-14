@@ -501,6 +501,7 @@ async def start_imbalances_monitoring_loop() -> None:
                 'Process was created'
             )
 
+            process.start()
             process.join()
         except Exception as exception:
             logger.error(
