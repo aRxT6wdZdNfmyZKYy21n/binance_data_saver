@@ -489,6 +489,8 @@ async def monitor_imbalances() -> None:
 async def start_imbalances_monitoring_loop() -> None:
     while True:
         try:
+            # Polars has a memory leak https://github.com/pola-rs/polars/issues/22871 so we need to create separate process
+
             process = multiprocessing.Process(
                 target=monitor_imbalances_process,
                 name='monitor_imbalances_process',
